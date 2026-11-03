@@ -52,7 +52,7 @@ def parse_rss(payload, source):
         except ValueError:
             try: date = parsedate_to_datetime(date).date().isoformat()
             except (TypeError,ValueError): continue
-        if not re.fullmatch(r'10\.\d{4,9}/\S+',doi):
+        if not re.fullmatch(r'10\.\d{4,9}/\S+',doi) or doi.startswith('10.1038/d41586-'):
             continue
         found.append({'doi':doi,'title':title,'published_at':date,'source':source.removesuffix(' RSS'),
                       'url':'https://doi.org/'+quote(doi,safe='/'),'provider':source,'review_status':'needs_review'})
@@ -89,7 +89,7 @@ def normalize_crossref(raw):
     doi = str(raw.get('DOI', '')).lower().strip()
     title = re.sub('<[^>]+>', '', ' '.join(raw.get('title', []))).strip()
     date = date_of(raw)
-    if not re.fullmatch(r'10\.\d{4,9}/\S+', doi) or not title or BLOCKED.search(title) or not date:
+    if not re.fullmatch(r'10\.\d{4,9}/\S+', doi) or doi.startswith('10.1038/d41586-') or not title or BLOCKED.search(title) or not date:
         return None
     if raw.get('type') != 'journal-article' or raw.get('update-to'):
         return None
