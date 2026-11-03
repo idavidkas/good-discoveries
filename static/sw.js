@@ -26,6 +26,7 @@ self.addEventListener('fetch', event => {
   if (request.method !== 'GET') return;
   const url = new URL(request.url);
   if (url.origin !== self.location.origin) return; // API goes directly to backend.
+  if (url.pathname.endsWith('/feed.json') || url.pathname.endsWith('/researched-feed.json')) return; // Live feed must not be frozen in the app-shell cache.
   if (request.mode === 'navigate') {
     event.respondWith(fetch(request).catch(async () =>
       (await caches.match(new URL('./index.html', self.registration.scope).href)) ||
