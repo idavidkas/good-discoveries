@@ -37,13 +37,15 @@ function dateStr(s) { const d = new Date(String(s || '').length === 10 ? `${s}T1
 function dateTimeStr(s) { const d = new Date(s); return isNaN(+d) ? 'Дата не указана' : mosDateTime.format(d); }
 function image(s) { const name = ['quantum.svg','coral.svg','dna.svg','cells.svg'].includes(s) ? s : 'quantum.svg'; return `./assets/${name}`; }
 function externalUrl(value) { try { const url = new URL(String(value)); return url.protocol === 'https:' && (url.hostname === 'doi.org' || url.hostname.endsWith('.doi.org')) ? url.href : '#'; } catch { return '#'; } }
+function reviewUrl(value) { try { const url = new URL(value); return url.protocol === 'https:' && ['www.nature.com','arxiv.org','pubmed.ncbi.nlm.nih.gov','www.nejm.org','www.nih.gov','www.ox.ac.uk'].includes(url.hostname) ? url.href : '#'; } catch { return '#'; } }
+function researchMarkup(a) { return a.reviewed_at ? `<div class="research-note"><strong>Проверка источников · ${safe(a.reviewed_at)}</strong><p>Сопоставлены результат, дата и ограничения. Это проверка публикации, а не независимое повторение эксперимента.</p>${(a.review_sources || []).map((url,i)=>`<a href="${reviewUrl(url)}" target="_blank" rel="noopener noreferrer">Источник ${i+1} ↗</a>`).join(' · ')}</div>` : ''; }
 function currentTime() { els.clock.textContent = `МОСКВА · ${mosTime.format(new Date())}`; }
 
 function mainMarkup(a) {
   return `<article class="feature-card">
     <div class="feature-body">
       <div class="feature-meta"><span class="topic-tag"><span class="topic-dot"></span>${safe(a.category)}</span><span class="meta-divider"></span><span class="date-meta">${dateStr(a.published_at)}</span></div>
-      <div class="story-copy"><div class="feature-small-label">ХОРОШАЯ НОВОСТЬ №${String(articles.length).padStart(2,'0')}</div><h3>${safe(a.title)}</h3><p class="feature-lead">${safe(a.lead)}</p>
+      <div class="story-copy"><div class="feature-small-label">ХОРОШАЯ НОВОСТЬ №${String(articles.length).padStart(2,'0')}</div><h1>${safe(a.title)}</h1><p class="feature-lead">${safe(a.lead)}</p>
         <div class="read-more-wrap"><div class="body-preview ${expanded ? 'is-expanded' : ''}" id="body-preview">${lineBreaks(a.body)}</div><button type="button" class="expand-button" id="expand-btn" aria-expanded="${expanded}" aria-controls="body-preview">${expanded ? 'Свернуть текст' : 'Читать подробнее'} <span class="expand-icon ${expanded ? 'up' : ''}">${icons.chevron}</span></button></div>
       </div>
       <div class="feature-bottom"><div class="source-block"><span class="source-icon">${icons.book}</span><span><span class="source-label">ПЕРВОИСТОЧНИК</span><strong>${safe(a.source)}</strong></span></div><a class="source-link" href="${externalUrl(a.url)}" target="_blank" rel="noopener noreferrer" aria-label="Открыть оригинальное исследование в новой вкладке">Исследование ${icons.arrowUp}</a></div>
@@ -73,7 +75,7 @@ function render({announce = false} = {}) {
     }
   }
   els.archiveCount.textContent = String(Math.max(articles.length-1,0));
-  els.indexCount.textContent = `01 / ${String(articles.length || 0).padStart(2,'0')}`;
+  if (els.indexCount) els.indexCount.textContent = `01 / ${String(articles.length || 0).padStart(2,'0')}`;
   const expandButton = document.getElementById('expand-btn');
   if (expandButton) expandButton.addEventListener('click', () => { expanded = !expanded; render(); document.getElementById('expand-btn')?.focus(); });
   document.getElementById('limits-btn')?.addEventListener('click', () => showArticle(articles[0], 'limits'));
@@ -88,7 +90,7 @@ function showArticle(a, tab='article') {
     <h2 id="modal-title">${safe(a.title)}</h2><p class="modal-lead">${safe(a.lead)}</p>
     <div class="modal-body">${lineBreaks(a.body)}</div>
     <div class="limits-panel" ${tab==='limits'?'data-highlight="true"':''}><div class="limits-heading">${icons.shield}<strong>Что доказано и где ограничения</strong></div><p>${safe(a.limitations)}</p><p class="evidence-small">Уровень материала: ${safe(a.evidence)}. Рецензирование само по себе не означает независимого повторения результатов.</p></div>
-    <div class="modal-source"><div><small>НАУЧНЫЙ ИСТОЧНИК</small><strong>${safe(a.source)}</strong><span>DOI: ${safe(a.doi)}</span></div><a href="${externalUrl(a.url)}" target="_blank" rel="noopener noreferrer">Открыть исследование ${icons.arrowUp}</a></div>
+    ${researchMarkup(a)}<div class="modal-source"><div><small>НАУЧНЫЙ ИСТОЧНИК</small><strong>${safe(a.source)}</strong><span>DOI: ${safe(a.doi)}</span></div><a href="${externalUrl(a.url)}" target="_blank" rel="noopener noreferrer">Открыть исследование ${icons.arrowUp}</a></div>
   </div>`;
   els.modal.hidden = false;
   els.modal.setAttribute('aria-hidden','false');
@@ -98,7 +100,7 @@ function showArticle(a, tab='article') {
 
 function showInfo() {
   lastFocus = document.activeElement;
-  els.modalContent.innerHTML = `<div class="modal-inner info-dialog"><div class="modal-info-icon">✳</div><div class="feature-small-label">НАШ РЕДАКЦИОННЫЙ ПРИНЦИП</div><h2 id="modal-title">Научный оптимизм.<br>Без самообмана.</h2><p class="modal-lead">Мы показываем одну позитивную научную новость, а не бесконечную ленту громких заголовков.</p><div class="info-steps"><div><span>01</span><strong>Поиск</strong><p>Сервер каждые 15 минут просматривает новые статьи выбранных рецензируемых научных журналов через Crossref.</p></div><div><span>02</span><strong>Проверка</strong><p>Для публикации нужен DOI, оригинальная работа, позитивный содержательный результат и честное описание ограничений. ИИ-проверка доступна только при настройке ключа; без неё материалы требуют ручного одобрения.</p></div><div><span>03</span><strong>Публикация</strong><p>Новые одобренные новости попадают в главную карточку, старые — в архив. Если подходящей статьи нет, ничего не меняется.</p></div></div><p class="info-note">Важно: автоматизированная редактура по метаданным не может установить независимую воспроизводимость исследования. Мы не называем одиночные результаты «окончательно доказанными».</p></div>`;
+  els.modalContent.innerHTML = `<div class="modal-inner info-dialog"><div class="modal-info-icon">✳</div><div class="feature-small-label">НАШ РЕДАКЦИОННЫЙ ПРИНЦИП</div><h2 id="modal-title">Научный оптимизм.<br>Без самообмана.</h2><p class="modal-lead">Мы показываем одну позитивную научную новость, а не бесконечную ленту громких заголовков.</p><div class="info-steps"><div><span>01</span><strong>Поиск</strong><p>Crossref, Europe PMC и RSS научных журналов проверяются примерно каждые 30 минут. Новые работы появляются в научном радаре. Расписание иногда может задерживаться.</p></div><div><span>02</span><strong>Проверка</strong><p>Для главной ленты сопоставляем первоисточники, результаты и ограничения. У каждой новости есть дата проверки и ссылки. Автоматически найденная работа сама по себе ещё не становится проверенной новостью.</p></div><div><span>03</span><strong>Публикация</strong><p>Новые одобренные новости попадают в главную карточку, старые — в архив. Если подходящей статьи нет, ничего не меняется.</p></div></div><p class="info-note">Важно: автоматизированная редактура по метаданным не может установить независимую воспроизводимость исследования. Мы не называем одиночные результаты «окончательно доказанными».</p></div>`;
   els.modal.hidden = false;
   els.modal.setAttribute('aria-hidden','false');
   document.body.classList.add('dialog-open');
@@ -110,7 +112,8 @@ function notify(message) { els.toast.textContent = message; els.toast.classList.
 
 async function loadFeed() {
   try {
-    const res = await fetch(`${(window.GOOD_DISCOVERIES_API_BASE || '').replace(/\/$/, '')}/api/news`, {headers: {'Accept':'application/json'}, cache:'no-store'});
+    const api = (window.GOOD_DISCOVERIES_API_BASE || '').replace(/\/$/, '');
+    const res = await fetch(api ? `${api}/api/news` : './feed.json', {headers: {'Accept':'application/json'}, cache:'no-store'});
     if (!res.ok) throw new Error(`Ошибка HTTP ${res.status}`);
     const json = await res.json();
     const next = Array.isArray(json.items) ? json.items : [];
@@ -119,6 +122,7 @@ async function loadFeed() {
     articles = next;
     newestDoi = next[0]?.doi || '';
     checkStatus = json;
+    renderRadar(json.candidates || []);
     if (firstLoad || updated) { expanded = false; render({announce: updated && !firstLoad}); }
     else if (next.length !== Number(els.archiveCount.textContent) + 1) render();
     updateStatus();
@@ -126,28 +130,44 @@ async function loadFeed() {
     if (newestDoi === null) {
       // Pages alone cannot run our API: clearly label the curated offline sample.
       try {
-        const sample = await fetch('./demo-feed.json');
+        const sample = await fetch('./researched-feed.json', {cache:'no-store'});
         if (!sample.ok) throw new Error('Demo unavailable');
         const demo = await sample.json();
         articles = demo.items || [];
         newestDoi = articles[0]?.doi || '';
-        checkStatus = {demo: true};
+        checkStatus = {...demo, offline: true};
         render();
       } catch {
         els.story.innerHTML = `<div class="empty-state"><span>↻</span><h3>Не удалось загрузить новости.</h3><p>Сервер временно недоступен.</p><button id="retry-btn" class="retry-button">Повторить</button></div>`;
         document.getElementById('retry-btn')?.addEventListener('click', loadFeed);
       }
     }
-    els.status.textContent = checkStatus?.demo ? 'Демонстрационные статьи · подключи API для обновлений' : 'Нет соединения · пробуем снова';
+    els.status.textContent = articles.length ? 'Сохранённые материалы · обновление временно недоступно' : 'Нет соединения · пробуем снова';
   }
 }
 
 function updateStatus() {
+  if (checkStatus?.mode === 'public_sources') {
+    const date = new Date(checkStatus.last_checked_at);
+    els.status.textContent = `Источники проверены ${dateTimeStr(date)} · обновление примерно каждые 30 минут` + (checkStatus.source_errors?.length ? ' · часть источников недоступна' : '');
+    const live = document.querySelector('.live-indicator span:last-child');
+    if (live) live.textContent = 'Научные источники подключены';
+    return;
+  }
   if (checkStatus?.demo) { els.status.textContent = 'Демонстрационные статьи · обновление пока не подключено'; return; }
   const d = checkStatus?.last_checked_at ? new Date(checkStatus.last_checked_at) : null;
   const base = d && !isNaN(+d) ? `Проверено в ${mosTime.format(d)} (МСК)` : 'Проверяем научные источники';
   els.status.textContent = base + ' · каждые 15 минут';
   els.status.title = checkStatus?.last_error ? 'Последняя проверка завершилась с ошибками; опубликованные новости сохранены.' : '';
+}
+
+function renderRadar(items) {
+  let radar = document.getElementById('science-radar');
+  if (!radar) {
+    radar = document.createElement('section'); radar.id = 'science-radar'; radar.className = 'science-radar';
+    document.querySelector('main').append(radar);
+  }
+  radar.innerHTML = `<h2>Научный радар</h2><p>Свежие работы из научных каталогов и RSS журналов. Заголовки на языке оригинала; результаты ещё требуют редакционной проверки.</p><div class="radar-grid">${items.slice(0,6).map(a=>`<a class="radar-card" href="${externalUrl(a.url)}" target="_blank" rel="noopener noreferrer"><small>${safe(a.source)} · ${dateStr(a.published_at)}</small><strong>${safe(a.title)}</strong><span>Открыть публикацию ↗</span></a>`).join('') || '<p>Новых работ для проверки пока нет.</p>'}</div>`;
 }
 
 document.getElementById('info-btn').addEventListener('click', showInfo);
