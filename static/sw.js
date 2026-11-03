@@ -2,7 +2,7 @@
 'use strict';
 const CACHE_NAME = 'good-discoveries-__BUILD_VERSION__';
 const APP_SHELL = [
-  './', './index.html', './offline.html', './manifest.webmanifest', './demo-feed.json',
+  './', './index.html', './offline.html', './manifest.webmanifest', './demo-feed.json', './researched-feed.json',
   './assets/config.js', './assets/app.js', './assets/pwa.js', './assets/styles.css',
   './assets/favicon.svg', './assets/icon-192.png', './assets/icon-512.png',
   './assets/quantum.svg', './assets/dna.svg', './assets/coral.svg', './assets/cells.svg'
@@ -26,7 +26,7 @@ self.addEventListener('fetch', event => {
   if (request.method !== 'GET') return;
   const url = new URL(request.url);
   if (url.origin !== self.location.origin) return; // API goes directly to backend.
-  if (url.pathname.endsWith('/feed.json') || url.pathname.endsWith('/researched-feed.json')) return; // Live feed must not be frozen in the app-shell cache.
+  if (url.pathname.endsWith('/feed.json') || url.pathname.endsWith('/feed.xml')) return; // Live feeds must not be frozen in the app-shell cache.
   if (request.mode === 'navigate') {
     event.respondWith(fetch(request).catch(async () =>
       (await caches.match(new URL('./index.html', self.registration.scope).href)) ||
