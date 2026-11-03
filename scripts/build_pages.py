@@ -22,7 +22,7 @@ version = re.sub('[^A-Za-z0-9]', '', os.getenv('GITHUB_SHA', os.getenv('CI_COMMI
 if OUT.exists():
     shutil.rmtree(OUT)
 (OUT / 'assets').mkdir(parents=True)
-for name in ('index.html', 'offline.html', 'manifest.webmanifest', 'demo-feed.json'):
+for name in ('index.html', 'offline.html', 'manifest.webmanifest', 'demo-feed.json', 'researched-feed.json'):
     shutil.copy2(SRC / name, OUT / name)
 for name in ('app.js', 'pwa.js', 'styles.css', 'favicon.svg', 'icon-180.png', 'icon-192.png',
              'icon-512.png', 'coral.svg', 'cells.svg', 'dna.svg', 'quantum.svg'):
@@ -31,4 +31,4 @@ for name in ('app.js', 'pwa.js', 'styles.css', 'favicon.svg', 'icon-180.png', 'i
     'window.GOOD_DISCOVERIES_API_BASE = ' + json.dumps(api, ensure_ascii=False) + ';\n', encoding='utf-8')
 (OUT / 'sw.js').write_text((SRC / 'sw.js').read_text(encoding='utf-8').replace('__BUILD_VERSION__', version), encoding='utf-8')
 print('Pages ready:', OUT)
-print('API:', api or 'NOT CONFIGURED — clearly marked demo feed until backend is connected')
+print('API:', api or 'Public scholarly sources via scheduled Pages feed')
