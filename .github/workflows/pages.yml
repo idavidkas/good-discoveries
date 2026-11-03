@@ -3,6 +3,8 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+  schedule:
+    - cron: '17,47 * * * *'
 permissions:
   contents: read
 concurrency:
@@ -22,6 +24,7 @@ jobs:
         env:
           API_BASE_URL: ${{ vars.API_BASE_URL }}
           CI_COMMIT_SHA: ${{ github.sha }}
+      - run: python scripts/sync_public_feed.py
       - uses: actions/upload-pages-artifact@v3
         with:
           path: public
