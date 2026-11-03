@@ -8,7 +8,7 @@ import datetime as dt
 import json
 import re
 import time
-import email.utils
+from email.utils import parsedate_to_datetime
 import xml.etree.ElementTree as ET
 from pathlib import Path
 from urllib.parse import quote, urlencode
@@ -18,23 +18,52 @@ ROOT = Path(__file__).resolve().parents[1]
 UA = 'GoodDiscoveries/1.0 (https://github.com/idavidkas/good-discoveries)'
 JOURNALS = ['0028-0836', '2375-2548', '1745-2473', '1078-8956', '1087-0156']
 BLOCKED = re.compile(r'\b(retract\w*|correction|erratum|editorial|corrigendum|reply|review|protocol)\b', re.I)
-SITE = 'https://idavidkas.github.io/good-discoveries/'
+RSS_SOURCES = {
+    'Nature RSS': 'https://www.nature.com/nature.rss',
+    'Nature Physics RSS': 'https://www.nature.com/nphys.rss',
+    'Science Advances RSS': 'https://feeds.science.org/rss/science-advances.xml',
+}
 
-def write_rss(feed, path):
-    rss = ET.Element('rss', version='2.0')
-    channel = ET.SubElement(rss, 'channel')
-    for name, value in [('title','Хорошие открытия'),('link',SITE),('language','ru'),
-                        ('description','Проверенные научные новости с первоисточниками и ограничениями')]:
-        ET.SubElement(channel,name).text = value
-    for article in feed['items']:
-        item = ET.SubElement(channel,'item')
-        ET.SubElement(item,'title').text = article['title']
-        ET.SubElement(item,'link').text = article['url']
-        ET.SubElement(item,'guid',isPermaLink='false').text = 'doi:' + article['doi'].lower()
-        published = dt.datetime.fromisoformat(article['added_at'])
-        ET.SubElement(item,'pubDate').text = email.utils.format_datetime(published)
-        ET.SubElement(item,'description').text = article['lead'] + '\n\n' + article['body'] + '\n\nОграничения: ' + article['limitations']
-    ET.ElementTree(rss).write(path,encoding='utf-8',xml_declaration=True)
+def parse_rss(payload, source):
+    if b'<!DOCTYPE' in payload.upper() or b'<!ENTITY' in payload.upper():
+        raise ValueError('XML entity declarations are not allowed')
+    root = ET.fromstring(payload)
+    found = []
+    for node in root.iter():
+        if node.tag.split('}')[-1] not in ('item','entry'):
+            continue
+        fields = {c.tag.split('}')[-1]: ''.join(c.itertext()).strip() for c in node}
+        title = re.sub('<[^>]+>', '', fields.get('title','')).strip()
+        if not title or BLOCKED.search(title):
+            continue
+        link = fields.get('link','')
+        for child in node:
+            if child.tag.split('}')[-1] == 'link' and child.attrib.get('href'):
+                link = child.attrib['href']
+        doi = fields.get('doi','').removeprefix('https://doi.org/').lower().strip()
+        if not doi:
+            match = re.search(r'10\.\d{4,9}/[^\s<>"?#]+', link)
+            if match: doi = match.group().lower()
+            elif 'nature.com/articles/' in link:
+                doi = '10.1038/' + link.split('/articles/')[1].split('?')[0].split('#')[0]
+        date = fields.get('date') or fields.get('published') or fields.get('pubDate') or fields.get('updated','')
+        try:
+            date = dt.date.fromisoformat(date[:10]).isoformat()
+        except ValueError:
+            try: date = parsedate_to_datetime(date).date().isoformat()
+            except (TypeError,ValueError): continue
+        if not re.fullmatch(r'10\.\d{4,9}/\S+',doi):
+            continue
+        found.append({'doi':doi,'title':title,'published_at':date,'source':source.removesuffix(' RSS'),
+                      'url':'https://doi.org/'+quote(doi,safe='/'),'provider':source,'review_status':'needs_review'})
+    return found
+
+def get_rss(url, source):
+    with urlopen(Request(url,headers={'User-Agent':UA,'Accept':'application/rss+xml, application/xml, text/xml'}),timeout=20) as response:
+        payload = response.read(2_000_001)
+    if len(payload) > 2_000_000:
+        raise ValueError('RSS payload too large')
+    return parse_rss(payload,source)
 
 def get_json(url):
     for attempt in range(3):
@@ -69,7 +98,7 @@ def normalize_crossref(raw):
             'url': 'https://doi.org/' + quote(doi, safe='/'), 'provider': 'Crossref',
             'review_status': 'needs_review'}
 
-def sync(output=None, fetch=get_json, today=None):
+def sync(output=None, fetch=get_json, today=None, rss_fetch=get_rss):
     today = today or dt.datetime.now(dt.timezone.utc).date()
     stamp = dt.datetime.now(dt.timezone.utc).isoformat(timespec='seconds')
     feed = json.loads((ROOT / 'static' / 'researched-feed.json').read_text(encoding='utf-8'))
@@ -110,15 +139,31 @@ def sync(output=None, fetch=get_json, today=None):
                 'review_status': 'needs_review'})
     except Exception as exc:
         errors.append(f'Europe PMC: {type(exc).__name__}')
+    rss_status = []
+    for name,url in RSS_SOURCES.items():
+        try:
+            rows = rss_fetch(url,name)
+            providers.append(name)
+            accepted = 0
+            for item in rows:
+                if since <= item['published_at'] <= today.isoformat() and item['doi'] not in reviewed:
+                    accepted += 1
+                    if item['doi'] in candidates:
+                        candidates[item['doi']]['provider'] += ' · ' + name
+                    else:
+                        candidates[item['doi']] = item
+            rss_status.append({'name':name,'url':url,'status':'ok','items':accepted})
+        except Exception as exc:
+            errors.append(f'{name}: {type(exc).__name__}')
+            rss_status.append({'name':name,'url':url,'status':'unavailable','items':0})
     if not providers:
         raise RuntimeError('All scholarly APIs unavailable; keep the previous successful deployment.')
     feed.update({'demo': False, 'mode': 'public_sources', 'last_checked_at': stamp,
-                 'providers': providers, 'source_errors': errors, 'poll_interval_seconds': 1800,
+                 'providers': providers, 'rss_sources':rss_status, 'source_errors': errors, 'poll_interval_seconds': 1800,
                  'candidates': sorted(candidates.values(), key=lambda a: (a['published_at'], a['doi']), reverse=True)[:24]})
     target = output or ROOT / 'public' / 'feed.json'
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(json.dumps(feed, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
-    write_rss(feed, target.with_name('feed.xml'))
     print(f'Public sources: {providers}; researched stories: {len(feed["items"])}; candidates: {len(feed["candidates"])}; errors: {errors}')
     return feed
 
