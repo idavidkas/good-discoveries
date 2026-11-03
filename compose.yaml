@@ -1,0 +1,15 @@
+services:
+  good-discoveries:
+    build: .
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    environment:
+      DATABASE_PATH: /app/data/news.db
+    volumes:
+      - good-discoveries-db:/app/data
+      - ./secrets:/app/secrets:ro
+volumes:
+  good-discoveries-db:

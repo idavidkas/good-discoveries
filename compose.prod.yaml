@@ -1,0 +1,32 @@
+# On a VPS: API_HOST=api.yourdomain.com in .env, DNS A record points at the VPS.
+services:
+  backend:
+    build: .
+    restart: unless-stopped
+    expose:
+      - '8000'
+    env_file:
+      - .env
+    environment:
+      DATABASE_PATH: /app/data/news.db
+    volumes:
+      - good-discoveries-db:/app/data
+      - ./secrets:/app/secrets:ro
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - '80:80'
+      - '443:443'
+    environment:
+      API_HOST: ${API_HOST:?Set API_HOST in your .env file}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - backend
+volumes:
+  good-discoveries-db:
+  caddy_data:
+  caddy_config:
